@@ -6,6 +6,11 @@ The script does not read the GitHub secrets directly: it reads environment varia
 of the process that runs it. In the CI they are created by the `env:` block of the
 job from the repository secrets; locally, you define them in the command line.
 
+The Space must be created once by hand at https://huggingface.co/new-space with the
+Gradio SDK and the ZeroGPU hardware: free accounts can no longer create Gradio Spaces
+on the free CPU hardware (the API answers 402 Payment Required), so the script only
+updates an existing Space.
+
 Environment variables:
     HF_TOKEN   Hugging Face token with write permission (required)
     HF_SPACE   Space id, e.g. "username/MLOps-Lab2-demo-modal" (required)
@@ -18,6 +23,7 @@ Run locally:
 """
 
 import os
+import sys
 from pathlib import Path
 
 from huggingface_hub import HfApi
@@ -27,13 +33,18 @@ SPACE_DIR = Path(__file__).resolve().parent.parent / "hf_space"
 
 
 def main():
-    """Creates the Space if needed, sets API_URL and uploads hf_space/."""
+    """Checks that the Space exists, sets API_URL and uploads hf_space/."""
     # Required variables: a KeyError stops the script if any of them is missing
     space_id = os.environ["HF_SPACE"]
     api = HfApi(token=os.environ["HF_TOKEN"])
 
-    # Creates the Space the first time (does nothing if it already exists)
-    api.create_repo(space_id, repo_type="space", space_sdk="gradio", exist_ok=True)
+    # The Space is not created here (see the docstring): stop with a clear message
+    if not api.repo_exists(space_id, repo_type="space"):
+        sys.exit(
+            f"Error: the Space {space_id} does not exist. Create it once at "
+            "https://huggingface.co/new-space (SDK: Gradio, hardware: ZeroGPU) "
+            "and run the job again."
+        )
 
     # The URL of the backend is stored as a variable of the Space: Hugging Face
     # passes it as an environment variable to the GUI, where app.py reads it
