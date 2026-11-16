@@ -5,10 +5,10 @@ PATH := $(HOME)/.local/bin:$(PATH)
 IMAGE ?= calculator-api
 PORT ?= 8000
 # Source folders and files checked by black and pylint
-SRC := mylib api cli hf_space scripts modal_app.py
+SRC := mylib api cli gui modal_app.py gui_app.py
 
-.PHONY: install format format-check lint test run-api run-space docker-build docker-run \
-	modal-serve modal-deploy refactor all
+.PHONY: install format format-check lint test run-api run-gui docker-build docker-run \
+	modal-serve modal-deploy modal-deploy-gui refactor all
 
 # Installs uv (if needed) and the dependencies, failing if uv.lock is out of date
 install:
@@ -36,9 +36,10 @@ test:
 run-api:
 	uv run uvicorn api.api:app --reload --port $(PORT)
 
-# Runs the Gradio GUI locally against the local API (start it first with make run-api)
-run-space:
-	API_URL=http://localhost:$(PORT) uv run python hf_space/app.py
+# Runs the Gradio GUI locally against the local API (start it first with make run-api):
+# http://localhost:7860
+run-gui:
+	API_URL=http://localhost:$(PORT) uv run python gui/app.py
 
 docker-build:
 	docker build -t $(IMAGE) .
@@ -50,9 +51,13 @@ docker-run:
 modal-serve:
 	uv run modal serve modal_app.py
 
-# Deployment on Modal (it uses the image published in Docker Hub)
+# Deployment of the backend on Modal (it uses the image published in Docker Hub)
 modal-deploy:
 	uv run modal deploy modal_app.py
+
+# Deployment of the GUI on Modal (API_URL must contain the URL of the backend)
+modal-deploy-gui:
+	uv run modal deploy gui_app.py
 
 refactor: format lint
 

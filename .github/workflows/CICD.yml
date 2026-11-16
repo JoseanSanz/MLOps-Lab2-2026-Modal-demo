@@ -107,24 +107,25 @@ jobs:
           DOCKER_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
         run: uv run --locked modal deploy modal_app.py
 
-  # 4. Continuous deployment of the GUI on Hugging Face Spaces (folder hf_space/)
-  deploy-hf:
-    name: Deploy the GUI on Hugging Face Spaces
+  # 4. Continuous deployment of the GUI (Gradio) on Modal: a second service (gui_app.py)
+  deploy-gui:
+    name: Deploy the GUI on Modal
     runs-on: ubuntu-latest
     needs: deploy-backend
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up uv
+      - name: Set up uv (with cache of the dependencies)
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       # BACKEND_API_URL: fixed URL of the API on Modal
       # (https://<modal-workspace>--calculator-api-serve.modal.run)
-      - name: Upload hf_space/ to the Space
+      - name: Deploy gui_app.py
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE: ${{ secrets.HF_USERNAME }}/MLOps-Lab2-2026-Modal-demo
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           API_URL: ${{ secrets.BACKEND_API_URL }}
-          GIT_SHA: ${{ github.sha }}
-        run: uv run --no-project --with huggingface_hub python scripts/deploy_hf_space.py
+        run: uv run --locked modal deploy gui_app.py

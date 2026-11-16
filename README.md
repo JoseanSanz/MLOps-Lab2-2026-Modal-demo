@@ -1,10 +1,10 @@
-[![CICD](https://github.com/JoseanSanz/MLOps-Lab2-demo-modal/actions/workflows/CICD.yml/badge.svg)](https://github.com/JoseanSanz/MLOps-Lab2-demo-modal/actions/workflows/CICD.yml)
+[![CICD](https://github.com/JoseanSanz/MLOps-Lab2-2026-Modal-demo/actions/workflows/CICD.yml/badge.svg)](https://github.com/JoseanSanz/MLOps-Lab2-2026-Modal-demo/actions/workflows/CICD.yml)
 
-# MLOps-Lab2-demo-modal
+# MLOps-Lab2-2026-Modal-demo
 
-Demo for the second lab of the MLOps subject, using **Modal** to host the backend. It is
+Demo for the second lab of the MLOps subject, using **Modal** to host the backend and the GUI. It is
 the same project as [MLOps-Lab2-demo](https://github.com/JoseanSanz/MLOps-Lab2-demo)
-(which uses Render): only the hosting of the backend changes, so you can choose the
+(which uses Render): only the hosting changes, so you can choose the
 platform you prefer. A simple calculator is used as the application, so that the focus
 is on the MLOps workflow. In this lab you will learn to:
 
@@ -13,8 +13,8 @@ is on the MLOps workflow. In this lab you will learn to:
 * Expose the logic as a REST API with **FastAPI** (a microservice: the backend).
 * **Containerize** the API with **Docker**.
 * Build a **CI/CD pipeline** with **GitHub Actions** that tests the code, builds and
-  publishes the image, deploys the backend on **Modal** and the GUI on **Hugging Face Spaces**.
-* Create a GUI with **Gradio** that uses the deployed API.
+  publishes the image and deploys the backend and the GUI on **Modal**.
+* Create a GUI with **Gradio** (the frontend, another service) that uses the deployed API.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ is on the MLOps workflow. In this lab you will learn to:
                     1. build ── format, lint, tests
                     2. docker ── build image, smoke test, push to Docker Hub
                     3. deploy-backend ── modal deploy ──► API (FastAPI) on Modal
-                    4. deploy-hf ── upload hf_space/ ──► GUI (Gradio) on Hugging Face
+                    4. deploy-gui ── modal deploy ──────► GUI (Gradio) on Modal
                                                                       │
                                                   POST /calculate ◄───┘
 ```
@@ -34,14 +34,14 @@ is on the MLOps workflow. In this lab you will learn to:
 
 | | Render ([MLOps-Lab2-demo](https://github.com/JoseanSanz/MLOps-Lab2-demo)) | Modal (this repository) |
 |---|---|---|
-| What it runs | The Docker image as a web service | The Docker image; the FastAPI app is served by `modal_app.py` (`@modal.asgi_app`) |
+| What it runs | API: the Docker image as a web service. GUI: a second web service built from `gui/` | API: the Docker image, served by `modal_app.py`. GUI: `gui_app.py`. Both with `@modal.asgi_app` |
 | Configuration | In the web dashboard (service created by hand) | As code (`modal_app.py`) |
-| Deployment from the CI | POST to a secret deploy hook (Render pulls `:latest`) | `modal deploy modal_app.py` with a Modal token |
+| Deployment from the CI | POST to a secret deploy hook of each service | `modal deploy modal_app.py` / `gui_app.py` with a Modal token |
 | Idle service | Free instances sleep after ~15 min | The container stops after `scaledown_window` seconds |
 | Cold start | Up to ~1 min | A few seconds |
 | Free usage | Free instance type | Monthly free credits |
 
-In both cases the GUI waits up to 60 s for the first request.
+The GUI waits up to 60 s (Modal) or 90 s (Render) for the first request.
 
 ## Project structure
 
@@ -51,12 +51,11 @@ In both cases the GUI waits up to 60 s for the first request.
 ├── api/api.py                 # REST API (FastAPI): /, /health, /calculate
 ├── templates/home.html        # home page of the API
 ├── tests/                     # unit tests (logic, GUI) and integration tests (CLI, API)
-├── hf_space/                  # Gradio GUI uploaded to the Hugging Face Space
+├── gui/                       # Gradio GUI (frontend): a separate service
 │   ├── app.py
-│   ├── requirements.txt
-│   └── README.md              # Space configuration (sdk, sdk_version, app_file)
-├── scripts/deploy_hf_space.py # uploads hf_space/ to the Space (used by the CI/CD)
+│   └── requirements.txt       # dependencies of the GUI service only
 ├── modal_app.py               # hosting of the backend on Modal
+├── gui_app.py                 # hosting of the GUI on Modal
 ├── Dockerfile                 # image of the API (only runtime dependencies)
 ├── Makefile                   # common tasks
 ├── pyproject.toml / uv.lock   # dependencies (runtime and dev group)
@@ -73,7 +72,7 @@ make all              # install + format-check + lint + test (what the CI does)
 
 uv run python -m cli.cli add 1 2        # CLI
 make run-api                            # API at http://localhost:8000/docs
-make run-space                          # Gradio GUI against the local API (in another terminal)
+make run-gui                            # Gradio GUI at http://localhost:7860 (in another terminal)
 ```
 
 With Docker:
@@ -90,6 +89,7 @@ With Modal (after `uv run modal token new`; it uses the image published in Docke
 ```bash
 make modal-serve      # temporary deployment with live logs (Ctrl+C to stop it)
 make modal-deploy     # permanent deployment: prints the public URL of the API
+API_URL=https://<url of the API> make modal-deploy-gui   # deployment of the GUI
 ```
 
 When you change the dependencies, use `uv add <package>` (or `uv add --dev <package>`)
@@ -103,7 +103,7 @@ exactly those versions.
 | `build` | push and pull request to `main` | `make install`, `make format-check`, `make lint`, `make test` |
 | `docker` | after `build` | builds the image and checks that the container answers `/health`; on `main` it pushes `:latest` and `:<commit SHA>` to Docker Hub |
 | `deploy-backend` | push to `main` | `modal deploy modal_app.py` with the image of the commit (`:<commit SHA>`) |
-| `deploy-hf` | push to `main` | uploads `hf_space/` to the Space and sets its `API_URL` variable |
+| `deploy-gui` | push to `main` | `modal deploy gui_app.py`, passing the URL of the API (`BACKEND_API_URL`) |
 
 Pull requests run the tests and build the image but never deploy.
 
@@ -115,6 +115,8 @@ Pull requests run the tests and build the image but never deploy.
    `docker push`) and deploy once by hand: `make modal-deploy`.
 3. Copy the URL that it prints, `https://<workspace>--calculator-api-serve.modal.run`,
    into the `BACKEND_API_URL` secret. The URL does not change in later deployments.
+4. The GUI is deployed by the pipeline (`deploy-gui`): its URL,
+   `https://<workspace>--calculator-gui-ui.modal.run`, is printed in the log of the job.
 
 ### Secrets (Settings → Secrets and variables → Actions)
 
@@ -125,11 +127,3 @@ Pull requests run the tests and build the image but never deploy.
 | `MODAL_TOKEN_ID` | Modal token id |
 | `MODAL_TOKEN_SECRET` | Modal token secret |
 | `BACKEND_API_URL` | public URL of the API on Modal (see above) |
-| `HF_USERNAME` | Hugging Face user |
-| `HF_TOKEN` | Hugging Face token with write permission |
-
-### Hugging Face Space
-
-The pipeline creates the Space `<HF_USERNAME>/MLOps-Lab2-demo-modal` if it does not
-exist, sets its `API_URL` variable and uploads the content of `hf_space/`. Do not edit
-the files directly in the Space: change them in this repository.
