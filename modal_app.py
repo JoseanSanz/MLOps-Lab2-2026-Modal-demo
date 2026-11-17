@@ -31,7 +31,7 @@ image = modal.Image.from_registry(DOCKER_IMAGE)
 app = modal.App("calculator-api")
 
 
-# - No GPU: the calculator does not need it (a GPU would only spend credits).
+# - No GPU: the calculator does not need it (a GPU would only spend credits). In Lab 3 (deep learning model for image prediction) we will see how to request one (adding gpu="T4").
 # - scaledown_window: seconds without requests before the container is stopped. The
 #   next request has to wait for a new container to start (cold start).
 @app.function(image=image, scaledown_window=120)
